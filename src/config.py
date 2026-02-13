@@ -90,9 +90,9 @@ TRAINING_CONFIG = {
 # NOTE: training on CPU takes forever, only use this for debugging
 TRAINING_CONFIG_CPU = {
     **TRAINING_CONFIG,
-    "input_size": (256, 256),
-    "batch_size": 2,
-    "num_epochs": 30,
+    "input_size": (128, 128),
+    "batch_size": 4,
+    "num_epochs": 15,
     "learning_rate": 1e-3,
     "num_workers": 0,   # multiprocessing on CPU causes issues sometimes
     "accumulation_steps": 1,

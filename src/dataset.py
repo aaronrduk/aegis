@@ -14,6 +14,7 @@ Digital University Kerala (DUK)
 
 import cv2
 import numpy as np
+import torch
 from pathlib import Path
 from typing import Optional, Tuple, List, Callable
 import albumentations as A
@@ -120,6 +121,10 @@ class SVAMITVADataset(Dataset):
 
         sample = {"image": image, "filename": image_path.name}
         if mask is not None:
+            if isinstance(mask, np.ndarray):
+                mask = torch.from_numpy(mask).long()
+            else:
+                mask = mask.long()
             sample["mask"] = mask
         return sample
 

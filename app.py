@@ -140,6 +140,28 @@ def build_colored_mask(mask):
     return colored
 
 
+def build_overlay(original_image, mask, alpha=0.5):
+    """Overlay detected features on original image. Background stays as original."""
+    original = np.array(original_image)
+    if len(original.shape) == 2:
+        original = np.stack([original]*3, axis=-1)
+    if original.shape[:2] != mask.shape:
+        from PIL import Image as PILImage
+        original = np.array(PILImage.fromarray(original).resize((mask.shape[1], mask.shape[0])))
+    
+    overlay = original.copy()
+    for class_idx, color in CLASS_COLORS.items():
+        if class_idx == 0:
+            continue
+        class_mask = mask == class_idx
+        if np.any(class_mask):
+            for c in range(3):
+                overlay[class_mask, c] = np.clip(
+                    original[class_mask, c] * (1 - alpha) + color[c] * alpha, 0, 255
+                ).astype(np.uint8)
+    return overlay
+
+
 def main():
     st.markdown(
         '<div class="main-header">🛰️ SVAMITVA Feature Extraction</div>',
@@ -239,7 +261,11 @@ def main():
 
                             # stash everything in session state so it persists across reruns
                             st.session_state["mask"] = mask
-                            st.session_state["colored_mask"] = build_colored_mask(mask)
+                            original_img = np.array(Image.open(input_path).convert("RGB"))
+                            st.session_state["original_image"] = original_img
+                            st.session_state["overlay"] = build_overlay(original_img, mask)
+                            detected_classes = [CLASS_NAMES[i] for i in range(1, len(CLASS_NAMES)) if np.any(mask == i)]
+                            st.session_state["detected_classes"] = detected_classes
                             st.session_state["probs"] = probs
                             st.session_state["metadata"] = metadata
                             st.session_state["input_path"] = input_path
@@ -254,17 +280,27 @@ def main():
                     '<div class="sub-header">🎨 Prediction Results</div>',
                     unsafe_allow_html=True,
                 )
-                st.image(
-                    st.session_state["colored_mask"],
-                    caption="Extracted Features",
-                    use_container_width=True,
-                )
-                st.plotly_chart(create_color_legend(), use_container_width=True)
+                detected = st.session_state.get("detected_classes", [])
+                if detected:
+                    st.image(
+                        st.session_state["overlay"],
+                        caption="Extracted Features (overlay on original)",
+                        use_container_width=True,
+                    )
+                    st.success(f"Detected: {', '.join(detected)}")
+                    st.plotly_chart(create_color_legend(), use_container_width=True)
+                else:
+                    st.image(
+                        st.session_state.get("original_image", st.session_state["overlay"]),
+                        caption="Original Image",
+                        use_container_width=True,
+                    )
+                    st.info("No features were detected in this image. Try adjusting the model settings or using a different image.")
 
         # --- statistics section ---
         if "mask" in st.session_state:
             mask = st.session_state["mask"]
-            colored_mask = st.session_state["colored_mask"]
+            colored_mask = st.session_state.get("overlay", build_colored_mask(mask))
 
             st.markdown('<div class="sub-header">📊 Statistics</div>', unsafe_allow_html=True)
 
@@ -302,7 +338,7 @@ def main():
                     )
 
             with dl_col2:
-                colored_img = Image.fromarray(colored_mask)
+                colored_img = Image.fromarray(st.session_state.get("overlay", colored_mask))
                 colored_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".png")
                 colored_img.save(colored_tmp.name)
                 with open(colored_tmp.name, "rb") as f:
