@@ -37,8 +37,7 @@ class SVAMITVAInference:
 
     # classes we've actually trained well — others get masked out
     DEFAULT_VALID_CLASSES = [0, 1, 2, 4, 5]
-    # this threshold worked best after testing different values (0.2 was too low, 0.5 too aggressive)
-    CONFIDENCE_THRESHOLD = 0.3
+    CONFIDENCE_THRESHOLD = 0.0
 
     def __init__(self, checkpoint_path: str, device: Optional[torch.device] = None,
                  use_tta: bool = True, valid_classes: Optional[List[int]] = None):
