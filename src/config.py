@@ -68,6 +68,19 @@ TRAINING_CONFIG = {
     "gradient_clip_max_norm": 1.0,
 }
 
+TRAINING_CONFIG_CPU = {
+    **TRAINING_CONFIG,
+    "input_size": (256, 256),
+    "batch_size": 2,
+    "num_epochs": 30,
+    "learning_rate": 1e-3,
+    "num_workers": 0,
+    "accumulation_steps": 1,
+    "warmup_epochs": 3,
+    "patience": 10,
+    "save_frequency": 5,
+}
+
 AUGMENTATION_CONFIG = {
     "train": {
         "horizontal_flip": 0.5,

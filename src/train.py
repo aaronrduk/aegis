@@ -11,13 +11,13 @@ from tqdm import tqdm
 import numpy as np
 
 try:
-    from .config import TRAINING_CONFIG, CLASS_NAMES
+    from .config import TRAINING_CONFIG, TRAINING_CONFIG_CPU, CLASS_NAMES
     from .model import create_model, create_loss
     from .dataset import SVAMITVADataset, get_training_augmentation, get_validation_augmentation
     from .metrics import MetricsTracker
     from .utils import setup_logger, get_device, AverageMeter
 except ImportError:
-    from config import TRAINING_CONFIG, CLASS_NAMES
+    from config import TRAINING_CONFIG, TRAINING_CONFIG_CPU, CLASS_NAMES
     from model import create_model, create_loss
     from dataset import SVAMITVADataset, get_training_augmentation, get_validation_augmentation
     from metrics import MetricsTracker
@@ -229,10 +229,12 @@ def main():
     parser.add_argument("--batch_size", type=int, default=None)
     parser.add_argument("--epochs", type=int, default=None)
     parser.add_argument("--lr", type=float, default=None)
+    parser.add_argument("--cpu", action="store_true", help="Use CPU-optimized config (256x256, smaller batch)")
+    parser.add_argument("--resume", type=str, default=None, help="Resume from checkpoint path")
 
     args = parser.parse_args()
 
-    config = TRAINING_CONFIG.copy()
+    config = TRAINING_CONFIG_CPU.copy() if args.cpu else TRAINING_CONFIG.copy()
     if args.batch_size is not None:
         config["batch_size"] = args.batch_size
     if args.epochs is not None:

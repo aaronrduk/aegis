@@ -13,7 +13,7 @@ AI-powered feature extraction from drone imagery for the SVAMITVA Scheme. Uses D
 ## Project Structure
 - `app.py` - Main Streamlit application
 - `src/` - Core source code
-  - `config.py` - Configuration, class definitions, training hyperparameters
+  - `config.py` - Configuration, class definitions, training hyperparameters (GPU + CPU profiles)
   - `model.py` - DeepLabV3+ model with FocalDiceLoss
   - `inference.py` - Inference with TTA and sliding window
   - `train.py` - Training pipeline with warmup, gradient clipping, accumulation
@@ -22,6 +22,12 @@ AI-powered feature extraction from drone imagery for the SVAMITVA Scheme. Uses D
   - `postprocess.py` - Morphological post-processing
   - `vectorize.py` - Mask to shapefile conversion (optional geospatial libs)
   - `utils.py` - Device detection, logging, area/object counting
+  - `auto_label.py` - Auto-generate segmentation masks from drone images using color/texture heuristics
+- `data/` - Training and validation data
+  - `train/images/` - 16 training drone images
+  - `train/masks/` - Auto-generated training masks
+  - `val/images/` - 4 validation drone images
+  - `val/masks/` - Auto-generated validation masks
 
 ## Key Design Decisions
 - EfficientNet-B4 encoder for better accuracy vs ResNet50
@@ -30,11 +36,28 @@ AI-powered feature extraction from drone imagery for the SVAMITVA Scheme. Uses D
 - Gradient accumulation (2 steps) to simulate larger batch size
 - LR warmup (5 epochs) + cosine annealing schedule
 - TTA (horizontal + vertical flip) at inference
+- Two training configs: TRAINING_CONFIG (GPU, 512x512) and TRAINING_CONFIG_CPU (CPU, 256x256)
 
 ## Running
 - Streamlit runs on port 5000, bound to 0.0.0.0
 - Configuration in `.streamlit/config.toml`
-- Training: `python -m src.train --train_images data/train/images --train_masks data/train/masks --val_images data/val/images --val_masks data/val/masks`
+
+### Auto-labeling (generate masks from images)
+```
+python src/auto_label.py data/train/images data/train/masks
+```
+
+### Training
+- GPU: `python -m src.train`
+- CPU (optimized): `python -m src.train --cpu`
+- Resume: `python -m src.train --cpu --resume checkpoints/best_model.pth`
+
+## Training Results
+- Trained 14 epochs on CPU with 20 drone images (16 train / 4 val)
+- Auto-generated masks detected: Background, Building_RCC, Building_Tiled, Building_Other, Road
+- Best validation IoU: 0.381, Accuracy: 69.5%
+- Note: For 95%+ accuracy, more manually annotated data and GPU training are recommended
 
 ## Recent Changes
-- 2026-02-13: Major overhaul - upgraded to EfficientNet-B4, Focal+Dice loss, stronger augmentation, gradient accumulation, LR warmup, cleaned up codebase, removed unnecessary files
+- 2026-02-13: Added auto-labeling script, trained model on 20 drone images, added CPU training config, fixed PyTorch 2.6 weights_only compatibility
+- 2026-02-13: Major overhaul - upgraded to EfficientNet-B4, Focal+Dice loss, stronger augmentation, gradient accumulation, LR warmup, cleaned up codebase
