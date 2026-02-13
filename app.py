@@ -65,12 +65,14 @@ def load_model(checkpoint_path, valid_classes_tuple=None):
     return SVAMITVAInference(checkpoint_path, use_tta=True, valid_classes=valid_classes)
 
 
-def create_color_legend():
+def create_color_legend(active_classes=None):
     """Makes that nice horizontal bar chart showing what each color means."""
     fig = go.Figure()
     for idx, name in enumerate(CLASS_NAMES):
         if idx == 0:
-            continue  # skip background, nobody cares about that
+            continue
+        if active_classes is not None and idx not in active_classes:
+            continue
         color = CLASS_COLORS[idx]
         fig.add_trace(go.Bar(
             x=[1],
@@ -259,13 +261,9 @@ def main():
                                     mask, POSTPROCESS_CONFIG["min_area"], len(CLASS_NAMES)
                                 )
 
-                            # stash everything in session state so it persists across reruns
-                            st.session_state["mask"] = mask
+                            st.session_state["raw_mask"] = mask
                             original_img = np.array(Image.open(input_path).convert("RGB"))
                             st.session_state["original_image"] = original_img
-                            st.session_state["overlay"] = build_overlay(original_img, mask)
-                            detected_classes = [CLASS_NAMES[i] for i in range(1, len(CLASS_NAMES)) if np.any(mask == i)]
-                            st.session_state["detected_classes"] = detected_classes
                             st.session_state["probs"] = probs
                             st.session_state["metadata"] = metadata
                             st.session_state["input_path"] = input_path
@@ -275,27 +273,39 @@ def main():
                             st.error(f"❌ Error during processing: {e}")
 
         with col2:
-            if "mask" in st.session_state:
+            if "raw_mask" in st.session_state:
                 st.markdown(
                     '<div class="sub-header">🎨 Prediction Results</div>',
                     unsafe_allow_html=True,
                 )
-                detected = st.session_state.get("detected_classes", [])
+                raw_mask = st.session_state["raw_mask"]
+                filtered_mask = raw_mask.copy()
+                for cls_idx in range(len(CLASS_NAMES)):
+                    if cls_idx not in selected_classes:
+                        filtered_mask[filtered_mask == cls_idx] = 0
+                st.session_state["mask"] = filtered_mask
+
+                original_img = st.session_state["original_image"]
+                overlay = build_overlay(original_img, filtered_mask)
+                st.session_state["overlay"] = overlay
+
+                detected = [CLASS_NAMES[i] for i in sorted(selected_classes) if i != 0 and np.any(filtered_mask == i)]
+
                 if detected:
                     st.image(
-                        st.session_state["overlay"],
+                        overlay,
                         caption="Extracted Features (overlay on original)",
                         use_container_width=True,
                     )
                     st.success(f"Detected: {', '.join(detected)}")
-                    st.plotly_chart(create_color_legend(), use_container_width=True)
+                    st.plotly_chart(create_color_legend(active_classes=selected_classes), use_container_width=True)
                 else:
                     st.image(
-                        st.session_state.get("original_image", st.session_state["overlay"]),
+                        original_img,
                         caption="Original Image",
                         use_container_width=True,
                     )
-                    st.info("No features were detected in this image. Try adjusting the model settings or using a different image.")
+                    st.info("No features were detected in this image. Try selecting more classes or using a different image.")
 
         # --- statistics section ---
         if "mask" in st.session_state:
