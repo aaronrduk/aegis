@@ -1,16 +1,31 @@
+"""
+Metrics calculation for segmentation evaluation.
+
+We track IoU, Dice, Precision, Recall, F1, and pixel accuracy.
+IoU (Intersection over Union) is the main metric we care about —
+it's the standard for segmentation tasks and what most papers report.
+
+Team SVAMITVA - SIH Hackathon 2026
+"""
+
 import numpy as np
 import torch
 from typing import Dict, List
 
 
 def calculate_iou(pred: np.ndarray, target: np.ndarray, num_classes: int) -> Dict[str, float]:
-    """Calculate IoU for each class."""
+    """Calculate IoU (Jaccard index) for each class.
+    
+    IoU = intersection / union — simple but tells you exactly how well
+    the predicted mask overlaps with the ground truth.
+    """
     ious = {}
     for class_idx in range(num_classes):
         pred_mask = pred == class_idx
         target_mask = target == class_idx
         intersection = np.logical_and(pred_mask, target_mask).sum()
         union = np.logical_or(pred_mask, target_mask).sum()
+        # if the class doesn't exist in either pred or target, it's NaN (not 0)
         ious[f"iou_class_{class_idx}"] = intersection / union if union > 0 else float("nan")
 
     valid_ious = [v for v in ious.values() if not np.isnan(v)]
@@ -19,7 +34,11 @@ def calculate_iou(pred: np.ndarray, target: np.ndarray, num_classes: int) -> Dic
 
 
 def calculate_dice(pred: np.ndarray, target: np.ndarray, num_classes: int) -> Dict[str, float]:
-    """Calculate Dice coefficient for each class."""
+    """Calculate Dice coefficient — similar to F1 score but for pixels.
+    
+    Dice = 2 * intersection / (|pred| + |target|)
+    It's more forgiving than IoU for small objects.
+    """
     dice_scores = {}
     for class_idx in range(num_classes):
         pred_mask = pred == class_idx
@@ -34,7 +53,11 @@ def calculate_dice(pred: np.ndarray, target: np.ndarray, num_classes: int) -> Di
 
 
 def calculate_precision_recall(pred: np.ndarray, target: np.ndarray, num_classes: int) -> Dict[str, float]:
-    """Calculate Precision, Recall, and F1 for each class."""
+    """Calculate Precision, Recall, and F1 for each class.
+    
+    We compute these per-class so we can see which classes the model struggles with.
+    Usually roads are easier than small infrastructure objects.
+    """
     metrics = {}
     for class_idx in range(num_classes):
         pred_mask = pred == class_idx
@@ -54,6 +77,7 @@ def calculate_precision_recall(pred: np.ndarray, target: np.ndarray, num_classes
         metrics[f"recall_class_{class_idx}"] = recall
         metrics[f"f1_class_{class_idx}"] = f1
 
+    # compute mean across classes (ignoring NaN)
     for metric_name in ["precision", "recall", "f1"]:
         values = [v for k, v in metrics.items() if k.startswith(metric_name) and not np.isnan(v)]
         metrics[f"mean_{metric_name}"] = np.mean(values) if values else 0.0
@@ -62,12 +86,14 @@ def calculate_precision_recall(pred: np.ndarray, target: np.ndarray, num_classes
 
 
 def calculate_accuracy(pred: np.ndarray, target: np.ndarray) -> float:
-    """Calculate overall pixel accuracy."""
+    """Overall pixel accuracy — not the best metric for segmentation
+    (because background dominates) but nice to have as a sanity check.
+    """
     return (pred == target).sum() / pred.size
 
 
 def calculate_all_metrics(pred: np.ndarray, target: np.ndarray, num_classes: int) -> Dict[str, float]:
-    """Calculate all segmentation metrics."""
+    """Calculate everything at once — used in the training loop."""
     metrics = {}
     metrics.update(calculate_iou(pred, target, num_classes))
     metrics.update(calculate_dice(pred, target, num_classes))
@@ -77,7 +103,12 @@ def calculate_all_metrics(pred: np.ndarray, target: np.ndarray, num_classes: int
 
 
 class MetricsTracker:
-    """Track and aggregate metrics during training/validation."""
+    """Accumulates metrics over batches during training/validation.
+    
+    We compute per-sample metrics and average them at the end of each epoch.
+    This is slightly different from computing metrics over the full dataset
+    at once, but it's good enough and way more memory efficient.
+    """
 
     def __init__(self, num_classes: int, class_names: List[str]):
         self.num_classes = num_classes
@@ -104,10 +135,11 @@ class MetricsTracker:
             self.metrics["accuracy"].append(m["accuracy"])
 
     def get_metrics(self) -> Dict[str, float]:
-        """Return averaged metrics."""
+        """Return averaged metrics across all samples seen so far."""
         return {f"mean_{k}": np.mean(v) if v else 0.0 for k, v in self.metrics.items()}
 
     def print_metrics(self, prefix: str = ""):
+        """Pretty-print current metrics — useful for debugging."""
         avg = self.get_metrics()
         print(f"\n{prefix} Metrics:")
         print(f"  Accuracy:  {avg['mean_accuracy']:.4f}")

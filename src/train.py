@@ -1,4 +1,17 @@
-"""Training script for SVAMITVA Feature Extraction Model."""
+"""
+Training script for the SVAMITVA segmentation model.
+
+This handles the full training loop — data loading, forward/backward pass,
+gradient accumulation, LR warmup, early stopping, checkpointing, etc.
+We kept it all in one class to keep things organized during the hackathon.
+
+Usage:
+    python -m src.train --cpu           # for testing on laptop
+    python -m src.train                 # for full GPU training
+    python -m src.train --epochs 50     # override specific params
+
+Team SVAMITVA - SIH Hackathon 2026
+"""
 
 import os
 import argparse
@@ -17,6 +30,7 @@ try:
     from .metrics import MetricsTracker
     from .utils import setup_logger, get_device, AverageMeter
 except ImportError:
+    # this happens when running the script directly (not as a module)
     from config import TRAINING_CONFIG, TRAINING_CONFIG_CPU, CLASS_NAMES
     from model import create_model, create_loss
     from dataset import SVAMITVADataset, get_training_augmentation, get_validation_augmentation
@@ -25,7 +39,11 @@ except ImportError:
 
 
 class Trainer:
-    """Trainer for SVAMITVA segmentation model."""
+    """Handles the full training pipeline for our segmentation model.
+    
+    Includes gradient accumulation (to simulate larger batch sizes on limited VRAM),
+    LR warmup, cosine annealing, mixed precision training, and early stopping.
+    """
 
     def __init__(self, config: dict, device: torch.device):
         self.config = config
@@ -45,6 +63,7 @@ class Trainer:
         self.logger.info("Creating model...")
         self.model = create_model(config).to(device)
 
+        # nice to see how big the model is
         total_params = sum(p.numel() for p in self.model.parameters())
         trainable_params = sum(p.numel() for p in self.model.parameters() if p.requires_grad)
         self.logger.info(f"Total parameters: {total_params:,}")
@@ -52,6 +71,7 @@ class Trainer:
 
         self.criterion = create_loss(config, device)
 
+        # AdamW > Adam for us, the weight decay regularization helps
         self.optimizer = torch.optim.AdamW(
             self.model.parameters(),
             lr=config["learning_rate"],
@@ -65,6 +85,7 @@ class Trainer:
         else:
             self.scheduler = None
 
+        # mixed precision for faster training on GPU
         self.scaler = torch.amp.GradScaler("cuda") if device.type == "cuda" else None
 
         self.best_iou = 0.0
@@ -72,13 +93,16 @@ class Trainer:
         self.patience_counter = 0
 
     def _get_warmup_lr(self, epoch: int) -> float:
-        """Linear warmup learning rate."""
+        """Linear warmup — start low and ramp up to target LR."""
         if epoch <= self.warmup_epochs:
             return self.config["learning_rate"] * epoch / max(self.warmup_epochs, 1)
         return self.config["learning_rate"]
 
     def _apply_warmup(self, epoch: int):
-        """Apply linear LR warmup for early epochs."""
+        """Apply warmup LR for the first few epochs.
+        
+        Without this, training was really unstable in the first 3-4 epochs.
+        """
         if epoch <= self.warmup_epochs:
             lr = self._get_warmup_lr(epoch)
             for param_group in self.optimizer.param_groups:
@@ -98,6 +122,7 @@ class Trainer:
             masks = batch["mask"].to(self.device)
 
             if self.scaler is not None:
+                # mixed precision path (GPU only)
                 with torch.amp.autocast("cuda"):
                     outputs = self.model(images)
                     loss = self.criterion(outputs, masks) / self.accumulation_steps
@@ -110,11 +135,13 @@ class Trainer:
                     self.scaler.update()
                     self.optimizer.zero_grad()
             else:
+                # regular precision path (CPU)
                 outputs = self.model(images)
                 loss = self.criterion(outputs, masks) / self.accumulation_steps
                 loss.backward()
 
                 if (batch_idx + 1) % self.accumulation_steps == 0:
+                    # gradient clipping prevents exploding gradients
                     torch.nn.utils.clip_grad_norm_(self.model.parameters(), self.max_norm)
                     self.optimizer.step()
                     self.optimizer.zero_grad()
@@ -128,7 +155,7 @@ class Trainer:
         return epoch_metrics
 
     def validate_epoch(self, val_loader: DataLoader, epoch: int) -> dict:
-        """Validate for one epoch."""
+        """Validate for one epoch — no gradients needed here."""
         self.model.eval()
         loss_meter = AverageMeter()
         metrics_tracker = MetricsTracker(self.config["num_classes"], CLASS_NAMES)
@@ -151,7 +178,7 @@ class Trainer:
         return epoch_metrics
 
     def save_checkpoint(self, epoch: int, metrics: dict, is_best: bool = False):
-        """Save model checkpoint."""
+        """Save model checkpoint — always save periodic + best separately."""
         checkpoint = {
             "epoch": epoch,
             "model_state_dict": self.model.state_dict(),
@@ -173,7 +200,7 @@ class Trainer:
             self.logger.info(f"Saved best model: {best_path}")
 
     def train(self, train_loader: DataLoader, val_loader: DataLoader):
-        """Main training loop with warmup and early stopping."""
+        """Main training loop — this is where the magic happens 🚀"""
         self.logger.info("Starting training...")
         self.logger.info(f"Training samples: {len(train_loader.dataset)}")
         self.logger.info(f"Validation samples: {len(val_loader.dataset)}")
@@ -184,6 +211,7 @@ class Trainer:
             train_metrics = self.train_epoch(train_loader, epoch)
             val_metrics = self.validate_epoch(val_loader, epoch)
 
+            # don't step the scheduler during warmup — they'd conflict
             if self.scheduler is not None and epoch > self.warmup_epochs:
                 self.scheduler.step()
 
@@ -193,12 +221,14 @@ class Trainer:
                 f"Val Loss: {val_metrics['loss']:.4f}, IoU: {val_metrics['mean_iou']:.4f}"
             )
 
+            # log everything to tensorboard
             for key, value in train_metrics.items():
                 self.writer.add_scalar(f"train/{key}", value, epoch)
             for key, value in val_metrics.items():
                 self.writer.add_scalar(f"val/{key}", value, epoch)
             self.writer.add_scalar("learning_rate", self.optimizer.param_groups[0]["lr"], epoch)
 
+            # check if this is a new best
             current_iou = val_metrics["mean_iou"]
             is_best = current_iou > (self.best_iou + self.config.get("min_delta", 0))
             if is_best:
@@ -212,6 +242,7 @@ class Trainer:
             if epoch % self.config["save_frequency"] == 0 or is_best:
                 self.save_checkpoint(epoch, val_metrics, is_best)
 
+            # early stopping — no point training if we're not improving
             if self.patience_counter >= self.config["patience"]:
                 self.logger.info(f"Early stopping at epoch {epoch}. Best IoU: {self.best_iou:.4f} at epoch {self.best_epoch}")
                 break
@@ -234,6 +265,7 @@ def main():
 
     args = parser.parse_args()
 
+    # pick the right config based on whether we have a GPU or not
     config = TRAINING_CONFIG_CPU.copy() if args.cpu else TRAINING_CONFIG.copy()
     if args.batch_size is not None:
         config["batch_size"] = args.batch_size
@@ -263,7 +295,7 @@ def main():
         batch_size=config["batch_size"],
         shuffle=True,
         num_workers=config["num_workers"],
-        pin_memory=device.type == "cuda",
+        pin_memory=device.type == "cuda",  # only useful with GPU
     )
     val_loader = DataLoader(
         val_dataset,

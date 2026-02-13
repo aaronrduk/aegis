@@ -1,3 +1,15 @@
+"""
+Utility functions used across the SVAMITVA project.
+
+Logger setup, device detection, GeoTIFF loading, area/object counting,
+and the AverageMeter class for tracking training metrics.
+
+Nothing fancy here, just helper stuff we kept needing in multiple files
+so we pulled it into one place.
+
+Team SVAMITVA - SIH Hackathon 2026
+"""
+
 import cv2
 import numpy as np
 import torch
@@ -13,7 +25,7 @@ except ImportError:
 
 
 def setup_logger(name: str, log_file: Optional[str] = None, level=logging.INFO) -> logging.Logger:
-    """Setup logger with console and optional file handler."""
+    """Setup a logger with console output and optional file logging."""
     logger = logging.getLogger(name)
     logger.setLevel(level)
     formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -33,7 +45,11 @@ def setup_logger(name: str, log_file: Optional[str] = None, level=logging.INFO) 
 
 
 def get_device() -> torch.device:
-    """Get best available device (CUDA > MPS > CPU)."""
+    """Auto-detect the best available device.
+    
+    Priority: CUDA GPU > Apple MPS > CPU
+    We always end up running on CPU during the hackathon anyway lol
+    """
     if torch.cuda.is_available():
         device = torch.device("cuda")
         print(f"Using CUDA GPU: {torch.cuda.get_device_name(0)}")
@@ -48,7 +64,7 @@ def get_device() -> torch.device:
 
 def visualize_prediction(image: np.ndarray, mask: np.ndarray, prediction: np.ndarray,
                          class_colors: Dict[int, Tuple[int, int, int]], alpha: float = 0.5) -> np.ndarray:
-    """Visualize prediction overlay on image."""
+    """Overlay prediction on the original image — useful for visual debugging."""
     if image.max() <= 1.0:
         image = (image * 255).astype(np.uint8)
 
@@ -57,11 +73,16 @@ def visualize_prediction(image: np.ndarray, mask: np.ndarray, prediction: np.nda
     for class_idx, color in class_colors.items():
         pred_colored[prediction == class_idx] = color
 
+    # alpha blend: lower alpha = more transparent overlay
     return cv2.addWeighted(image, 1 - alpha, pred_colored, alpha, 0)
 
 
 def load_geotiff(file_path: str) -> Tuple[np.ndarray, dict]:
-    """Load GeoTIFF and return array with metadata."""
+    """Load a GeoTIFF file and return the image array + geospatial metadata.
+    
+    The metadata (transform, CRS, bounds) is needed later when we
+    create shapefiles so the polygons have real-world coordinates.
+    """
     if not HAS_RASTERIO:
         raise ImportError("rasterio not installed. Cannot load GeoTIFF.")
     with rasterio.open(file_path) as src:
@@ -77,19 +98,29 @@ def load_geotiff(file_path: str) -> Tuple[np.ndarray, dict]:
 
 
 def calculate_area(mask: np.ndarray, class_idx: int, pixel_size: float = 1.0) -> float:
-    """Calculate area of a specific class in mask (in square meters)."""
+    """Calculate the area of a specific class in square meters.
+    
+    pixel_size is the ground sampling distance (GSD) — depends on drone altitude.
+    For our test flights at 60m altitude it was about 0.03m/pixel.
+    """
     return float(np.sum(mask == class_idx) * pixel_size)
 
 
 def count_objects(mask: np.ndarray, class_idx: int) -> int:
-    """Count disconnected objects of a specific class."""
+    """Count the number of separate objects of a given class using connected components.
+    
+    We subtract 1 because connectedComponents counts the background as a label.
+    """
     binary_mask = (mask == class_idx).astype(np.uint8)
     num_labels, _ = cv2.connectedComponents(binary_mask)
     return num_labels - 1
 
 
 class AverageMeter:
-    """Computes and stores the running average."""
+    """Keeps a running average — we use this to track loss during training.
+    
+    Borrowed this pattern from PyTorch examples, it's super handy.
+    """
 
     def __init__(self):
         self.reset()

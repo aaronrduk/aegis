@@ -58,6 +58,12 @@ python src/auto_label.py data/train/images data/train/masks
 - Best validation IoU: 0.381, Accuracy: 69.5%
 - Note: For 95%+ accuracy, more manually annotated data and GPU training are recommended
 
+## Documentation
+- `SVAMITVA_Documentation.pdf` - Full project documentation (23 pages)
+- `generate_docs.py` - Script to regenerate the PDF documentation
+
 ## Recent Changes
+- 2026-02-13: Fixed green output bug (untrained class predictions), added confidence thresholding, class masking, per-class detection controls
+- 2026-02-13: Humanized codebase with student-style comments, created PDF documentation
 - 2026-02-13: Added auto-labeling script, trained model on 20 drone images, added CPU training config, fixed PyTorch 2.6 weights_only compatibility
 - 2026-02-13: Major overhaul - upgraded to EfficientNet-B4, Focal+Dice loss, stronger augmentation, gradient accumulation, LR warmup, cleaned up codebase

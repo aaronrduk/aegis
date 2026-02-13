@@ -1,3 +1,16 @@
+"""
+Model definitions for the SVAMITVA segmentation pipeline.
+
+We're using DeepLabV3+ with an EfficientNet-B4 backbone from the
+segmentation_models_pytorch library. Tried UNet and FPN too but
+DeepLabV3+ handled the multi-scale building detection best.
+
+The loss function is a combo of Focal + Dice which works really well
+for our imbalanced dataset (way too much background, not enough buildings).
+
+Team SVAMITVA - SIH Hackathon 2026
+"""
+
 import torch
 import torch.nn as nn
 import segmentation_models_pytorch as smp
@@ -5,7 +18,13 @@ from typing import Optional
 
 
 class SVAMITVASegmentationModel(nn.Module):
-    """Multi-class segmentation model using DeepLabV3+ for SVAMITVA drone imagery."""
+    """Our main segmentation model — DeepLabV3+ with EfficientNet-B4 encoder.
+    
+    We picked this combo because:
+    - EfficientNet-B4 has good accuracy/speed tradeoff
+    - DeepLabV3+ handles multi-scale features well (important for buildings of different sizes)
+    - smp makes it super easy to swap encoders if we want to experiment later
+    """
 
     def __init__(
         self,
@@ -25,21 +44,26 @@ class SVAMITVASegmentationModel(nn.Module):
         )
 
     def forward(self, x):
-        """Forward pass returning logits (B, C, H, W)."""
+        """Forward pass — returns raw logits (B, C, H, W)."""
         return self.model(x)
 
     def predict(self, x):
-        """Return class predictions (B, H, W)."""
+        """Get hard class predictions (B, H, W) — just argmax over softmax."""
         logits = self.forward(x)
         return torch.argmax(torch.softmax(logits, dim=1), dim=1)
 
     def predict_proba(self, x):
-        """Return probability maps (B, C, H, W)."""
+        """Get probability maps (B, C, H, W) — useful for TTA averaging."""
         return torch.softmax(self.forward(x), dim=1)
 
 
 class FocalDiceLoss(nn.Module):
-    """Combined Focal + Dice loss for segmentation with class imbalance."""
+    """Combined Focal + Dice loss for handling class imbalance.
+    
+    Plain cross-entropy was terrible for us because >80% of pixels are background.
+    Focal loss downweights easy examples, and Dice directly optimizes the overlap metric.
+    We also add a small CE term with class weights for extra stability.
+    """
 
     def __init__(
         self,
@@ -55,10 +79,12 @@ class FocalDiceLoss(nn.Module):
         self.class_weights = class_weights
 
     def forward(self, predictions, targets):
-        """Compute combined focal + dice loss, with optional class weighting."""
+        """Compute the combined loss."""
         focal = self.focal_loss(predictions, targets)
         dice = self.dice_loss(predictions, targets)
         total = self.focal_weight * focal + self.dice_weight * dice
+
+        # the 0.1 weight on CE was found empirically — too high and it dominates
         if self.class_weights is not None:
             ce = nn.functional.cross_entropy(predictions, targets, weight=self.class_weights)
             total = total + 0.1 * ce
@@ -66,7 +92,7 @@ class FocalDiceLoss(nn.Module):
 
 
 def create_model(config: dict) -> SVAMITVASegmentationModel:
-    """Create model from config."""
+    """Factory function to build the model from config dict."""
     return SVAMITVASegmentationModel(
         num_classes=config["num_classes"],
         encoder=config["encoder"],
@@ -76,7 +102,7 @@ def create_model(config: dict) -> SVAMITVASegmentationModel:
 
 
 def create_loss(config: dict, device: torch.device) -> FocalDiceLoss:
-    """Create loss function from config."""
+    """Factory function to build the loss from config dict."""
     class_weights = None
     if "class_weights" in config:
         class_weights = torch.tensor(config["class_weights"], dtype=torch.float32).to(device)

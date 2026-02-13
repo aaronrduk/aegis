@@ -1,3 +1,13 @@
+"""
+Main Streamlit app for SVAMITVA Feature Extraction.
+
+This is the frontend of our project — basically a drag-and-drop interface
+where you upload a drone image and it segments out buildings, roads, waterbodies, etc.
+We spent way too long on the CSS styling tbh but it looks pretty clean now.
+
+Team SVAMITVA - SIH Hackathon 2026
+"""
+
 import streamlit as st
 import numpy as np
 import tempfile
@@ -12,6 +22,7 @@ from src.postprocess import postprocess_multiclass_mask
 from src.vectorize import mask_to_shapefiles
 from src.utils import calculate_area, count_objects
 
+# page config has to come before any other st calls — learned that the hard way
 st.set_page_config(
     page_title="SVAMITVA Feature Extraction",
     page_icon="🛰️",
@@ -19,6 +30,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
+# custom CSS for the app — we wanted it to look professional for the demo
 st.markdown("""
 <style>
     .main-header {
@@ -45,16 +57,20 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 
+# cache the model so it doesn't reload on every interaction
+# the tuple trick is because streamlit can't hash lists for caching
 @st.cache_resource
-def load_model(checkpoint_path):
-    return SVAMITVAInference(checkpoint_path, use_tta=True)
+def load_model(checkpoint_path, valid_classes_tuple=None):
+    valid_classes = list(valid_classes_tuple) if valid_classes_tuple else None
+    return SVAMITVAInference(checkpoint_path, use_tta=True, valid_classes=valid_classes)
 
 
 def create_color_legend():
+    """Makes that nice horizontal bar chart showing what each color means."""
     fig = go.Figure()
     for idx, name in enumerate(CLASS_NAMES):
         if idx == 0:
-            continue
+            continue  # skip background, nobody cares about that
         color = CLASS_COLORS[idx]
         fig.add_trace(go.Bar(
             x=[1],
@@ -75,15 +91,16 @@ def create_color_legend():
 
 
 def calculate_statistics(mask, pixel_size=1.0):
+    """Get stats for each detected class — count + area in m²."""
     stats = []
     for class_idx in range(1, len(CLASS_NAMES)):
         class_name = CLASS_NAMES[class_idx]
         area = calculate_area(mask, class_idx, pixel_size)
-        count = count_objects(mask, class_idx)
-        if area > 0 or count > 0:
+        num_objects = count_objects(mask, class_idx)
+        if area > 0 or num_objects > 0:
             stats.append({
                 "Class": class_name,
-                "Count": count,
+                "Count": num_objects,
                 "Area (m²)": f"{area:.2f}",
                 "Color": f"rgb({CLASS_COLORS[class_idx][0]},{CLASS_COLORS[class_idx][1]},{CLASS_COLORS[class_idx][2]})",
             })
@@ -91,6 +108,7 @@ def calculate_statistics(mask, pixel_size=1.0):
 
 
 def create_statistics_chart(stats):
+    """Bar chart for feature areas — plotly makes this super easy."""
     if not stats:
         return None
     classes = [s["Class"] for s in stats]
@@ -114,6 +132,7 @@ def create_statistics_chart(stats):
 
 
 def build_colored_mask(mask):
+    """Convert class-index mask to RGB for display. Pretty straightforward."""
     h, w = mask.shape
     colored = np.zeros((h, w, 3), dtype=np.uint8)
     for class_idx, color in CLASS_COLORS.items():
@@ -136,6 +155,7 @@ def main():
     - ⚡ Infrastructure (Transformers, Tanks, Wells)
     """)
 
+    # --- sidebar config ---
     with st.sidebar:
         st.header("⚙️ Configuration")
 
@@ -149,19 +169,22 @@ def main():
             st.warning(f"⚠️ Model checkpoint not found: {checkpoint_path}")
             st.info("💡 Using demo model (random weights) for demonstration purposes.")
 
-        model = None
-        with st.spinner("Loading model..."):
-            try:
-                model = load_model(checkpoint_path)
-                st.success("✅ Model loaded successfully!")
-            except Exception as e:
-                st.error(f"❌ Failed to load model: {e}")
+        st.subheader("🎯 Classes to Detect")
+        # these are the classes we've actually trained on so far
+        # the others are planned but we didn't have enough labeled data yet
+        trained_defaults = {0: True, 1: True, 2: True, 3: False, 4: True, 5: True,
+                           6: False, 7: False, 8: False, 9: False}
+        not_trained_label = " ⚠️ not trained"
+        not_trained_set = {3, 6, 7, 8, 9}
+        selected_classes = [0]  # background is always included
+        for idx in range(1, len(CLASS_NAMES)):
+            label = CLASS_NAMES[idx]
+            if idx in not_trained_set:
+                label += not_trained_label
+            if st.checkbox(label, value=trained_defaults.get(idx, False), key=f"cls_{idx}"):
+                selected_classes.append(idx)
 
-        st.subheader("🎯 Features to Extract")
-        extract_buildings = st.checkbox("Buildings", value=True)
-        extract_roads = st.checkbox("Roads", value=True)
-        extract_waterbodies = st.checkbox("Waterbodies", value=True)
-        extract_infrastructure = st.checkbox("Infrastructure", value=True)
+        valid_classes = tuple(sorted(selected_classes))
 
         st.subheader("🔧 Post-processing")
         apply_postprocess = st.checkbox("Apply post-processing", value=True)
@@ -169,7 +192,16 @@ def main():
 
         st.subheader("📤 Output Options")
         separate_shapefiles = st.checkbox("Separate shapefiles per class", value=True)
+        # NOTE: pixel_size depends on the drone flight altitude, 0.1m is a decent default
         pixel_size = st.number_input("Pixel size (m)", value=0.1, min_value=0.01, step=0.01)
+
+        model = None
+        with st.spinner("Loading model..."):
+            try:
+                model = load_model(checkpoint_path, valid_classes_tuple=valid_classes)
+                st.success("✅ Model loaded successfully!")
+            except Exception as e:
+                st.error(f"❌ Failed to load model: {e}")
 
     if model is None:
         st.warning("Model is not available. Please check your checkpoint path in the sidebar.")
@@ -185,6 +217,7 @@ def main():
             )
 
             if uploaded_file is not None:
+                # save to temp file so opencv/rasterio can read it
                 with tempfile.NamedTemporaryFile(
                     delete=False, suffix=Path(uploaded_file.name).suffix
                 ) as tmp_file:
@@ -204,15 +237,7 @@ def main():
                                     mask, POSTPROCESS_CONFIG["min_area"], len(CLASS_NAMES)
                                 )
 
-                            if not extract_buildings:
-                                mask[np.isin(mask, [1, 2, 3, 4])] = 0
-                            if not extract_roads:
-                                mask[mask == 5] = 0
-                            if not extract_waterbodies:
-                                mask[mask == 6] = 0
-                            if not extract_infrastructure:
-                                mask[np.isin(mask, [7, 8, 9])] = 0
-
+                            # stash everything in session state so it persists across reruns
                             st.session_state["mask"] = mask
                             st.session_state["colored_mask"] = build_colored_mask(mask)
                             st.session_state["probs"] = probs
@@ -236,6 +261,7 @@ def main():
                 )
                 st.plotly_chart(create_color_legend(), use_container_width=True)
 
+        # --- statistics section ---
         if "mask" in st.session_state:
             mask = st.session_state["mask"]
             colored_mask = st.session_state["colored_mask"]
@@ -254,6 +280,7 @@ def main():
             else:
                 st.info("No features detected in the image.")
 
+            # --- download section ---
             st.markdown(
                 '<div class="sub-header">⬇️ Download Results</div>',
                 unsafe_allow_html=True,
@@ -306,6 +333,7 @@ def main():
                                 separate_classes=separate_shapefiles,
                             )
 
+                            # zip everything up for a clean download
                             zip_tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".zip")
                             with zipfile.ZipFile(zip_tmp.name, "w") as zipf:
                                 for file in Path(output_dir).rglob("*"):
@@ -324,6 +352,7 @@ def main():
                         except Exception as e:
                             st.error(f"❌ Error creating shapefiles: {e}")
 
+    # footer
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: gray;">

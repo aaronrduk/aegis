@@ -1,3 +1,18 @@
+"""
+Vectorization module — converts raster segmentation masks to vector shapefiles.
+
+This is what makes our output actually useful for GIS software.
+The pipeline: pixel mask -> polygons (via rasterio) -> simplify -> GeoDataFrame -> .shp
+
+Shapefiles are the standard format that government agencies use, which is
+why we're outputting these instead of just PNGs.
+
+TODO: add GeoJSON output option too — it's more modern and easier to work with
+TODO: try with larger simplify_tolerance for faster loading in QGIS
+
+Team SVAMITVA - SIH Hackathon 2026
+"""
+
 import os
 import numpy as np
 from typing import List, Optional
@@ -34,7 +49,11 @@ except ImportError:
 
 
 def simplify_polygon(polygon, tolerance: float = 1.0):
-    """Simplify polygon using Douglas-Peucker algorithm."""
+    """Simplify polygon geometry using Douglas-Peucker algorithm.
+    
+    This reduces the number of vertices which makes the shapefiles
+    way smaller and faster to render in GIS software.
+    """
     if polygon is None:
         return None
     return polygon.simplify(tolerance, preserve_topology=True)
@@ -42,13 +61,18 @@ def simplify_polygon(polygon, tolerance: float = 1.0):
 
 def mask_to_polygons(mask: np.ndarray, class_idx: int, transform: Optional[object] = None,
                      simplify_tolerance: float = 1.0) -> List:
-    """Convert binary mask to polygons."""
+    """Convert a binary class mask to a list of polygons.
+    
+    rasterio.features.shapes does the heavy lifting here — it traces
+    the boundaries of connected regions and returns them as GeoJSON-like dicts.
+    """
     if not HAS_GEOPANDAS or not HAS_RASTERIO:
         print("Warning: geopandas/rasterio not installed. Cannot vectorize.")
         return []
 
     binary_mask = (mask == class_idx).astype(np.uint8)
 
+    # if no geospatial transform is given, just use pixel coordinates
     if transform is None:
         h, w = mask.shape
         transform = rasterio.transform.from_bounds(0, 0, w, h, w, h)
@@ -67,14 +91,14 @@ def mask_to_polygons(mask: np.ndarray, class_idx: int, transform: Optional[objec
 
 def create_geodataframe(mask: np.ndarray, class_names: List[str], transform: Optional[object] = None,
                         crs: Optional[str] = None, simplify_tolerance: float = 1.0) -> Optional[object]:
-    """Create GeoDataFrame from segmentation mask."""
+    """Create a GeoDataFrame with all detected features from the mask."""
     if not HAS_GEOPANDAS:
         return None
 
     features = []
     for class_idx in np.unique(mask):
         if class_idx == 0:
-            continue
+            continue  # skip background
         polygons = mask_to_polygons(mask, class_idx, transform=transform, simplify_tolerance=simplify_tolerance)
         for poly_idx, poly in enumerate(polygons):
             if poly is None or poly.is_empty:
@@ -92,6 +116,7 @@ def create_geodataframe(mask: np.ndarray, class_names: List[str], transform: Opt
     if features:
         return gpd.GeoDataFrame(features, crs=crs)
 
+    # return empty GeoDataFrame with correct schema if nothing was found
     return gpd.GeoDataFrame(
         columns=["geometry", "class_id", "class_name", "area", "perimeter", "feature_id"],
         crs=crs,
@@ -99,7 +124,7 @@ def create_geodataframe(mask: np.ndarray, class_names: List[str], transform: Opt
 
 
 def save_shapefile(gdf, output_path: str, driver: str = "ESRI Shapefile"):
-    """Save GeoDataFrame as shapefile."""
+    """Save a GeoDataFrame as a shapefile."""
     if gdf is None:
         return
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -113,7 +138,7 @@ def save_shapefile(gdf, output_path: str, driver: str = "ESRI Shapefile"):
 def create_class_shapefile(mask: np.ndarray, class_idx: int, class_name: str, output_path: str,
                            transform: Optional[object] = None, crs: Optional[str] = None,
                            simplify_tolerance: float = 1.0):
-    """Create shapefile for a single class."""
+    """Create a separate shapefile for a single class — cleaner for analysis."""
     if not HAS_GEOPANDAS:
         return
 
@@ -138,7 +163,11 @@ def mask_to_shapefiles(mask: np.ndarray, output_dir: str, base_name: str,
                        class_names: Optional[list] = None, transform: Optional[object] = None,
                        crs: Optional[str] = None, simplify_tolerance: float = 1.0,
                        separate_classes: bool = True):
-    """Convert mask to shapefiles (one per class or combined)."""
+    """Convert a full segmentation mask to shapefiles.
+    
+    Can output either one shapefile per class (easier to work with in QGIS)
+    or a single combined shapefile with a class_name column.
+    """
     if not HAS_GEOPANDAS or not HAS_RASTERIO:
         print("Error: Missing geospatial libraries (geopandas/rasterio). Skipping shapefile generation.")
         return
