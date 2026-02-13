@@ -1,6 +1,6 @@
 """
 Generate professional PDF documentation for the SVAMITVA Feature Extraction System.
-Team SVAMITVA - SIH Hackathon 2026
+Digital University Kerala (DUK)
 """
 
 from reportlab.lib.pagesizes import A4
@@ -206,8 +206,8 @@ def build_pdf():
         styles["DocSubtitle"]
     ))
     story.append(Spacer(1, 30))
-    story.append(Paragraph("Team SVAMITVA", styles["TeamName"]))
-    story.append(Paragraph("Smart India Hackathon 2026", styles["DocSubtitle"]))
+    story.append(Paragraph("Digital University Kerala (DUK)", styles["TeamName"]))
+    story.append(Paragraph("AI Model developed by DUK Students for Feature Extraction", styles["DocSubtitle"]))
     story.append(Spacer(1, 30))
 
     today = datetime.now().strftime("%B %d, %Y")
@@ -1422,7 +1422,7 @@ def build_pdf():
     story.append(Spacer(1, 10))
 
     story.append(Paragraph(
-        "<b>Team SVAMITVA</b> | Smart India Hackathon 2026",
+        "<b>Digital University Kerala (DUK)</b> | AI Model developed by DUK Students",
         ParagraphStyle("FooterStyle", parent=styles["Normal"], fontSize=11,
                        alignment=TA_CENTER, textColor=PRIMARY, fontName="Helvetica-Bold")
     ))

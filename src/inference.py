@@ -7,7 +7,7 @@ Supports test-time augmentation (TTA) and sliding window for large images.
 NOTE: on CPU, a single 4000x3000 drone image takes about 2 minutes with
 sliding window + TTA. On a GPU it's like 5 seconds. We really need GPU access lol.
 
-Team SVAMITVA - SIH Hackathon 2026
+Digital University Kerala (DUK)
 """
 
 import torch

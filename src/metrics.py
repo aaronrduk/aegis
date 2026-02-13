@@ -5,7 +5,7 @@ We track IoU, Dice, Precision, Recall, F1, and pixel accuracy.
 IoU (Intersection over Union) is the main metric we care about —
 it's the standard for segmentation tasks and what most papers report.
 
-Team SVAMITVA - SIH Hackathon 2026
+Digital University Kerala (DUK)
 """
 
 import numpy as np

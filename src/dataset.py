@@ -9,7 +9,7 @@ The heavy augmentations in training (elastic, grid distortion, coarse dropout)
 were inspired by the Kaggle satellite segmentation competitions — they really
 help with generalization when you have a small dataset like ours.
 
-Team SVAMITVA - SIH Hackathon 2026
+Digital University Kerala (DUK)
 """
 
 import cv2

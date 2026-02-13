@@ -1,7 +1,7 @@
 # SVAMITVA Feature Extraction System
 
 ## Overview
-AI-powered feature extraction from drone imagery for the SVAMITVA Scheme. Uses DeepLabV3+ architecture with EfficientNet-B4 backbone for multi-class semantic segmentation of drone images, extracting building footprints (RCC, Tiled, Tin, Others), roads, waterbodies, and infrastructure (transformers, tanks, wells). Targets 95%+ accuracy.
+AI model developed by Digital University Kerala (DUK) students for feature extraction from drone imagery for the SVAMITVA Scheme. Uses DeepLabV3+ architecture with EfficientNet-B4 backbone for multi-class semantic segmentation of drone images, extracting building footprints (RCC, Tiled, Tin, Others), roads, waterbodies, and infrastructure (transformers, tanks, wells). Targets 95%+ accuracy.
 
 ## Tech Stack
 - **Language**: Python 3.11

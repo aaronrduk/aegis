@@ -5,7 +5,7 @@ This is the frontend of our project — basically a drag-and-drop interface
 where you upload a drone image and it segments out buildings, roads, waterbodies, etc.
 We spent way too long on the CSS styling tbh but it looks pretty clean now.
 
-Team SVAMITVA - SIH Hackathon 2026
+Digital University Kerala (DUK)
 """
 
 import streamlit as st
@@ -356,7 +356,7 @@ def main():
     st.markdown("---")
     st.markdown("""
     <div style="text-align: center; color: gray;">
-        <p>SVAMITVA Feature Extraction System | Built for Hackathon 2026</p>
+        <p>SVAMITVA Feature Extraction System | Developed by Digital University Kerala Students</p>
         <p>Powered by DeepLabV3+ and PyTorch</p>
     </div>
     """, unsafe_allow_html=True)

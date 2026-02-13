@@ -8,7 +8,7 @@ DeepLabV3+ handled the multi-scale building detection best.
 The loss function is a combo of Focal + Dice which works really well
 for our imbalanced dataset (way too much background, not enough buildings).
 
-Team SVAMITVA - SIH Hackathon 2026
+Digital University Kerala (DUK)
 """
 
 import torch

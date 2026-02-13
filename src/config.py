@@ -5,7 +5,7 @@ All the hyperparameters, class definitions, and paths live here.
 We kept tweaking these values during the hackathon — the current ones
 are what gave us the best results after a LOT of experimentation.
 
-Team SVAMITVA - SIH Hackathon 2026
+Digital University Kerala (DUK)
 """
 
 import os

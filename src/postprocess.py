@@ -8,7 +8,7 @@ connected component filtering, and boundary smoothing.
 Honestly this step makes a HUGE difference in how professional the output looks.
 Before adding this, the shapefiles were unusable.
 
-Team SVAMITVA - SIH Hackathon 2026
+Digital University Kerala (DUK)
 """
 
 import cv2

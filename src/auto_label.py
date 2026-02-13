@@ -11,7 +11,7 @@ produces much better results.
 
 We spent a whole night tweaking these HSV ranges with trial and error lol.
 
-Team SVAMITVA - SIH Hackathon 2026
+Digital University Kerala (DUK)
 """
 
 import cv2

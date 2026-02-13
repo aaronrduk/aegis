@@ -10,7 +10,7 @@ why we're outputting these instead of just PNGs.
 TODO: add GeoJSON output option too — it's more modern and easier to work with
 TODO: try with larger simplify_tolerance for faster loading in QGIS
 
-Team SVAMITVA - SIH Hackathon 2026
+Digital University Kerala (DUK)
 """
 
 import os

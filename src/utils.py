@@ -7,7 +7,7 @@ and the AverageMeter class for tracking training metrics.
 Nothing fancy here, just helper stuff we kept needing in multiple files
 so we pulled it into one place.
 
-Team SVAMITVA - SIH Hackathon 2026
+Digital University Kerala (DUK)
 """
 
 import cv2

@@ -492,4 +492,4 @@ For questions or issues:
 
 ---
 
-**Built with ❤️ for the SVAMITVA Hackathon 2026**
+**AI Model developed by Digital University Kerala (DUK) Students for Feature Extraction**

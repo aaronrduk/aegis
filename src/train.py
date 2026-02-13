@@ -10,7 +10,7 @@ Usage:
     python -m src.train                 # for full GPU training
     python -m src.train --epochs 50     # override specific params
 
-Team SVAMITVA - SIH Hackathon 2026
+Digital University Kerala (DUK)
 """
 
 import os
